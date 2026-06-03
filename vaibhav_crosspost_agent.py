@@ -1,16 +1,16 @@
 import os
-from flask import Flask, request
-from twilio.twiml.messaging_response import MessagingResponse
-from twilio.rest import Client
 import threading
 import time
 import json
 import requests
 import feedparser
+from flask import Flask, request
+from twilio.twiml.messaging_response import MessagingResponse
+from twilio.rest import Client
 
 app = Flask(__name__)
 
-# --- CONFIGURATION (Loaded from Environment Variables) ---
+# --- CONFIGURATION ---
 FB_PAGE_TOKEN = os.getenv("FB_PAGE_TOKEN")
 FB_PAGE_ID = os.getenv("FB_PAGE_ID")
 TWILIO_SID = os.getenv("TWILIO_SID")
@@ -48,11 +48,22 @@ def monitor_loop():
                     pending.append({'title': latest.title, 'video_url': latest.link})
                     save_pending(pending)
                     with open(HISTORY_FILE, 'a') as f: f.write(latest.id + "\n")
-                    client.messages.create(body=f"New video: {latest.title}\nReply YES to post.", from_=TWILIO_NUM, to=MY_NUM)
+                    
+                    client.messages.create(
+                        body=f"New video: {latest.title}\nReply YES to post.", 
+                        from_=TWILIO_NUM, to=MY_NUM
+                    )
         except Exception as e: print(f"Monitor error: {e}")
-        time.sleep(300)
+        time.sleep(300) 
 
-# --- WEBHOOK ---
+# --- ROUTES ---
+
+# Root route for Render health checks
+@app.route('/')
+def home():
+    return "Bot is active and running", 200
+
+# SMS route for Twilio
 @app.route('/sms', methods=['POST'])
 def sms_reply():
     msg = request.form.get('Body', '').strip().lower()
@@ -70,7 +81,9 @@ def sms_reply():
         else: resp.message("No pending videos.")
     return str(resp)
 
+# Start background monitor
+threading.Thread(target=monitor_loop, daemon=True).start()
+
 if __name__ == '__main__':
-    threading.Thread(target=monitor_loop, daemon=True).start()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
