@@ -8,6 +8,7 @@ from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
 from twilio.rest import Client
 
+# --- FLASK INITIALIZATION ---
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
@@ -58,10 +59,11 @@ def monitor_loop():
 
 # --- ROUTES ---
 
-# Root route for Render health checks
+# Updated root route to monitor queue status
 @app.route('/')
 def home():
-    return "Bot is active and running", 200
+    pending = load_pending()
+    return f"Bot is alive! Pending videos in queue: {len(pending)}", 200
 
 # SMS route for Twilio
 @app.route('/sms', methods=['POST'])
