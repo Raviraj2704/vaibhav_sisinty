@@ -1,91 +1,39 @@
-import os
-import threading
 import time
-import json
-import requests
-import feedparser
-from flask import Flask, request
-from twilio.twiml.messaging_response import MessagingResponse
-from twilio.rest import Client
+import threading
+from flask import Flask
+# Import your Twilio/YouTube libraries here
+# from your_module import check_youtube, send_whatsapp 
 
-# --- FLASK INITIALIZATION ---
 app = Flask(__name__)
 
-# --- CONFIGURATION ---
-FB_PAGE_TOKEN = os.getenv("FB_PAGE_TOKEN")
-FB_PAGE_ID = os.getenv("FB_PAGE_ID")
-TWILIO_SID = os.getenv("TWILIO_SID")
-TWILIO_AUTH = os.getenv("TWILIO_AUTH")
-TWILIO_NUM = os.getenv("TWILIO_NUM")
-MY_NUM = os.getenv("MY_NUM")
-
-client = Client(TWILIO_SID, TWILIO_AUTH)
-STORE_FILE = 'pending_posts.json'
-HISTORY_FILE = 'history.txt'
-
-# --- HELPERS ---
-def load_pending():
-    if not os.path.exists(STORE_FILE): return []
-    with open(STORE_FILE, 'r') as f: 
-        try: return json.load(f)
-        except: return []
-
-def save_pending(data):
-    with open(STORE_FILE, 'w') as f: json.dump(data, f, indent=4)
-
-# --- BACKGROUND MONITOR ---
-def monitor_loop():
-    YOUTUBE_RSS_URL = 'https://www.youtube.com/feeds/videos.xml?channel_id=UCoa5Z3ly38-uX7_P5h8-S1g'
+# 1. The Monitoring Loop
+def run_agent():
+    print("AGENT STARTING: Monitoring loop initiated.")
     while True:
         try:
-            feed = feedparser.parse(YOUTUBE_RSS_URL)
-            if feed.entries:
-                latest = feed.entries[0]
-                if not os.path.exists(HISTORY_FILE): open(HISTORY_FILE, 'w').close()
-                with open(HISTORY_FILE, 'r') as f: history = f.read()
+            print("Checking YouTube for new videos...")
+            # --- REPLACE THIS WITH YOUR YOUTUBE LOGIC ---
+            # 1. Fetch RSS Feed
+            # 2. Check history.txt
+            # 3. If new video, send WhatsApp via Twilio
+            
+            # For testing, you can add: print("Successfully checked.")
+            
+            time.sleep(300) # Wait 5 minutes
+        except Exception as e:
+            print(f"Error in agent loop: {e}")
+            time.sleep(60) # Wait a minute before retrying after an error
 
-                if latest.id not in history:
-                    pending = load_pending()
-                    pending.append({'title': latest.title, 'video_url': latest.link})
-                    save_pending(pending)
-                    with open(HISTORY_FILE, 'a') as f: f.write(latest.id + "\n")
-                    
-                    client.messages.create(
-                        body=f"New video: {latest.title}\nReply YES to post.", 
-                        from_=TWILIO_NUM, to=MY_NUM
-                    )
-        except Exception as e: print(f"Monitor error: {e}")
-        time.sleep(300) 
+# 2. Start the Agent in a background thread
+# This keeps it alive while the Web Server handles traffic
+threading.Thread(target=run_agent, daemon=True).start()
 
-# --- ROUTES ---
-
-# Updated root route to monitor queue status
+# 3. The Web Server Route (Keeps UptimeRobot happy)
 @app.route('/')
 def home():
-    pending = load_pending()
-    return f"Bot is alive! Pending videos in queue: {len(pending)}", 200
+    return "Agent is running and active!"
 
-# SMS route for Twilio
-@app.route('/sms', methods=['POST'])
-def sms_reply():
-    msg = request.form.get('Body', '').strip().lower()
-    resp = MessagingResponse()
-    if msg == 'yes':
-        pending = load_pending()
-        if pending:
-            video = pending.pop(0)
-            url = f"https://graph.facebook.com/v21.0/{FB_PAGE_ID}/videos"
-            params = {'access_token': FB_PAGE_TOKEN, 'file_url': video['video_url'], 'title': video['title']}
-            if requests.post(url, data=params).status_code == 200:
-                resp.message(f"Successfully posted: {video['title']}")
-                save_pending(pending)
-            else: resp.message("Facebook post failed.")
-        else: resp.message("No pending videos.")
-    return str(resp)
+if __name__ == "__main__":
+    # Render uses port 10000 by default
+    app.run(host='0.0.0.0', port=10000)
 
-# Start background monitor
-threading.Thread(target=monitor_loop, daemon=True).start()
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
