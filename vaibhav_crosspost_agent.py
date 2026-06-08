@@ -2,135 +2,110 @@ import os
 import time
 import threading
 import traceback
+
 import feedparser
 from flask import Flask
 from twilio.rest import Client
 
-app = Flask(name)
+app = Flask(__name__)
 
-==================================
-ENVIRONMENT VARIABLES
-==================================
-
+# Environment variables
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 MY_PHONE_NUMBER = os.getenv("MY_PHONE_NUMBER")
 
-Twilio Sandbox Number
-
+# Twilio WhatsApp Sandbox number
 TWILIO_NUM = "whatsapp:+14155238886"
 
-Vaibhav Sisinty Channel ID
-
+# Vaibhav Sisinty YouTube Channel ID
 CHANNEL_ID = "UClXAalunTPaX1YV185DWUeg"
+YOUTUBE_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
 
-YOUTUBE_URL = (
-f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
-)
+CHECK_INTERVAL_SECONDS = 300
 
-==================================
-SEND WHATSAPP MESSAGE
-==================================
 
 def send_whatsapp(message):
-try:
-client = Client(
-TWILIO_ACCOUNT_SID,
-TWILIO_AUTH_TOKEN
-)
+    try:
+        if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN or not MY_PHONE_NUMBER:
+            print("Twilio environment variables are missing")
+            return
 
-    client.messages.create(
-        body=message,
-        from_=TWILIO_NUM,
-        to=f"whatsapp:{MY_PHONE_NUMBER}"
-    )
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
-    print("WhatsApp message sent successfully")
+        client.messages.create(
+            body=message,
+            from_=TWILIO_NUM,
+            to=f"whatsapp:{MY_PHONE_NUMBER}",
+        )
 
-except Exception as e:
-    print(f"Twilio Error: {e}")
-    traceback.print_exc()
-==================================
-YOUTUBE MONITOR
-==================================
+        print("WhatsApp message sent successfully")
+
+    except Exception as e:
+        print(f"Twilio Error: {e}")
+        traceback.print_exc()
+
 
 def run_agent():
-print("Agent Started")
+    print("Agent Started")
 
-# Test message on startup
-send_whatsapp(
-    "✅ Vaibhav Crosspost Agent Started Successfully"
-)
+    send_whatsapp("Vaibhav Crosspost Agent Started Successfully")
 
-last_video_id = None
+    last_video_id = None
 
-while True:
-    try:
-        print("Checking YouTube feed...")
+    while True:
+        try:
+            print("Checking YouTube feed...")
 
-        feed = feedparser.parse(YOUTUBE_URL)
+            feed = feedparser.parse(YOUTUBE_URL)
 
-        if feed.entries:
+            if not feed.entries:
+                print("No feed entries found")
+                time.sleep(CHECK_INTERVAL_SECONDS)
+                continue
 
             latest_video = feed.entries[0]
+            latest_video_id = latest_video.id
 
             if last_video_id is None:
-                last_video_id = latest_video.id
-                print(
-                    f"Tracking: {latest_video.title}"
-                )
+                last_video_id = latest_video_id
+                print(f"Tracking: {latest_video.title}")
 
-            elif latest_video.id != last_video_id:
-
+            elif latest_video_id != last_video_id:
                 title = latest_video.title
                 link = latest_video.link
 
                 send_whatsapp(
-                    f"🎥 New Vaibhav Sisinty Video\n\n"
+                    f"New Vaibhav Sisinty Video\n\n"
                     f"Title: {title}\n\n"
                     f"Watch Here:\n{link}"
                 )
 
-                last_video_id = latest_video.id
+                last_video_id = latest_video_id
 
-                print(
-                    f"New Video Detected: {title}"
-                )
+                print(f"New Video Detected: {title}")
 
-        else:
-            print("No feed entries found")
+        except Exception as e:
+            print(f"Feed Error: {e}")
+            traceback.print_exc()
 
-    except Exception as e:
-        print(f"Feed Error: {e}")
-        traceback.print_exc()
+        time.sleep(CHECK_INTERVAL_SECONDS)
 
-    # Check every 5 minutes
-    time.sleep(300)
-==================================
-START BACKGROUND THREAD
-==================================
 
 threading.Thread(
-target=run_agent,
-daemon=True
+    target=run_agent,
+    daemon=True,
 ).start()
 
-==================================
-HEALTH CHECK
-==================================
 
 @app.route("/")
 def home():
-return "Vaibhav Crosspost Agent Running"
+    return "Vaibhav Crosspost Agent Running"
 
-==================================
-START APP
-==================================
 
-if name == "main":
-port = int(os.environ.get("PORT", 10000))
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
 
-app.run(
-    host="0.0.0.0",
-    port=port
-)
+    app.run(
+        host="0.0.0.0",
+        port=port,
+    )
