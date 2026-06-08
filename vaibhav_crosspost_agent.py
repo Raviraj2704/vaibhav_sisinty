@@ -16,11 +16,13 @@ app = Flask(__name__)
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 MY_PHONE_NUMBER = os.getenv("MY_PHONE_NUMBER")
-TWILIO_NUM = os.getenv("TWILIO_NUM", "whatsapp:+14155238886")
+TWILIO_NUM = os.getenv("TWILIO_NUM", "whatsapp:+14155238886").lower()
 
-FACEBOOK_PAGE_ID = os.getenv("FACEBOOK_PAGE_ID")
-FACEBOOK_PAGE_ACCESS_TOKEN = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN")
-GRAPH_API_VERSION = os.getenv("GRAPH_API_VERSION", "v25.0")
+FACEBOOK_PAGE_ID = os.getenv("FACEBOOK_PAGE_ID") or os.getenv("FB_PAGE_ID")
+FACEBOOK_PAGE_ACCESS_TOKEN = (
+    os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN") or os.getenv("FB_PAGE_TOKEN")
+)
+GRAPH_API_VERSION = os.getenv("GRAPH_API_VERSION", "v20.0")
 
 CHANNEL_ID = os.getenv("CHANNEL_ID", "UClXAalunTPaX1YV185DWUeg")
 YOUTUBE_URL = f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
@@ -55,7 +57,7 @@ def save_state(state):
 def send_whatsapp(message):
     try:
         if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN or not MY_PHONE_NUMBER:
-            print("Missing Twilio environment variables")
+            print("Missing Twilio environment variables", flush=True)
             return
 
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
@@ -66,10 +68,10 @@ def send_whatsapp(message):
             to=f"whatsapp:{MY_PHONE_NUMBER}",
         )
 
-        print("WhatsApp message sent")
+        print("WhatsApp message sent", flush=True)
 
     except Exception as e:
-        print(f"Twilio Error: {e}")
+        print(f"Twilio Error: {e}", flush=True)
         traceback.print_exc()
 
 
@@ -104,7 +106,7 @@ def send_approval_request(video):
 
 def post_to_facebook(video):
     if not FACEBOOK_PAGE_ID or not FACEBOOK_PAGE_ACCESS_TOKEN:
-        raise RuntimeError("Missing FACEBOOK_PAGE_ID or FACEBOOK_PAGE_ACCESS_TOKEN")
+        raise RuntimeError("Missing Facebook Page ID or Facebook Page Access Token")
 
     url = f"https://graph.facebook.com/{GRAPH_API_VERSION}/{FACEBOOK_PAGE_ID}/feed"
 
@@ -133,7 +135,7 @@ def post_to_facebook(video):
 
 
 def run_agent():
-    print("Agent Started")
+    print("Agent Started", flush=True)
 
     send_whatsapp(
         "Vaibhav Crosspost Agent Started. I will ask before posting to Facebook."
@@ -141,12 +143,12 @@ def run_agent():
 
     while True:
         try:
-            print("Checking YouTube feed...")
+            print("Checking YouTube feed...", flush=True)
 
             latest_video = get_latest_video()
 
             if latest_video is None:
-                print("No feed entries found")
+                print("No feed entries found", flush=True)
                 time.sleep(CHECK_INTERVAL_SECONDS)
                 continue
 
@@ -157,18 +159,31 @@ def run_agent():
                 if last_video_id is None:
                     state["last_video_id"] = latest_video["id"]
                     save_state(state)
-                    print(f"Tracking current video: {latest_video['title']}")
+                    print(
+                        f"Tracking current video: {latest_video['title']}",
+                        flush=True,
+                    )
 
                 elif latest_video["id"] != last_video_id:
                     state["last_video_id"] = latest_video["id"]
                     state["pending_video"] = latest_video
                     save_state(state)
 
-                    print(f"New video detected: {latest_video['title']}")
+                    print(
+                        f"New video detected: {latest_video['title']}",
+                        flush=True,
+                    )
+
                     send_approval_request(latest_video)
 
+                else:
+                    print(
+                        f"No new video. Latest is still: {latest_video['title']}",
+                        flush=True,
+                    )
+
         except Exception as e:
-            print(f"Feed Error: {e}")
+            print(f"Feed Error: {e}", flush=True)
             traceback.print_exc()
 
         time.sleep(CHECK_INTERVAL_SECONDS)
@@ -189,7 +204,7 @@ def twilio_whatsapp_reply():
     resp = MessagingResponse()
 
     if incoming_from != expected_from:
-        print(f"Ignoring message from unauthorized number: {incoming_from}")
+        print(f"Ignoring message from unauthorized number: {incoming_from}", flush=True)
         return str(resp)
 
     try:
@@ -214,6 +229,8 @@ def twilio_whatsapp_reply():
                     f"Facebook Post ID: {facebook_post_id}"
                 )
 
+                print(f"Posted to Facebook: {facebook_post_id}", flush=True)
+
             elif body in ["CANCEL", "SKIP", "NO"]:
                 if pending_video:
                     skipped_title = pending_video["title"]
@@ -224,6 +241,8 @@ def twilio_whatsapp_reply():
                         "Facebook posting cancelled.\n\n"
                         f"Skipped: {skipped_title}"
                     )
+
+                    print(f"Facebook post cancelled: {skipped_title}", flush=True)
                 else:
                     send_whatsapp("No pending video to cancel.")
 
@@ -234,7 +253,7 @@ def twilio_whatsapp_reply():
                 )
 
     except Exception as e:
-        print(f"Approval/Facebook Error: {e}")
+        print(f"Approval/Facebook Error: {e}", flush=True)
         traceback.print_exc()
         send_whatsapp(f"Facebook posting failed: {e}")
 
@@ -249,4 +268,8 @@ threading.Thread(
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+
+    app.run(
+        host="0.0.0.0",
+        port=port,
+    )
