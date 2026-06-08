@@ -1,5 +1,5 @@
 ﻿flask
-gunicorn
 twilio
 feedparser
+gunicorn
 requests
